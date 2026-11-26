@@ -1,0 +1,70 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: 'Target Mac CPU: Apple Silicon = arm64, Intel = x86_64'
+        required: true
+        type: choice
+        default: arm64
+        options:
+          - arm64
+          - x86_64
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS - ${{ inputs.architecture }}
+    runs-on: ${{ inputs.architecture == 'arm64' && 'macos-15' || 'macos-15-intel' }}
+    timeout-minutes: 30
+    env:
+      BUILD_ARCH: ${{ inputs.architecture }}
+      MACOSX_DEPLOYMENT_TARGET: '15.0'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Download source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Qt and Serial Port
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: qtserialport
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-macos -G Xcode \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DCMAKE_OSX_ARCHITECTURES="$BUILD_ARCH" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET"
+
+      - name: Compile Release
+        run: cmake --build build-macos --config Release --parallel 3
+
+      - name: Bundle Qt libraries and package app
+        run: |
+          APP_PATH="build-macos/Release/Rotary control.app"
+          "$QT_ROOT_DIR/bin/macdeployqt" "$APP_PATH" \
+            -always-overwrite -verbose=2 -codesign=-
+          lipo -verify_arch "$BUILD_ARCH" "$APP_PATH/Contents/MacOS/Rotary control"
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$APP_PATH" "dist/Rotary-control-macOS-${BUILD_ARCH}.zip"
+
+      - name: Upload app package
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/Rotary-control-macOS-${{ inputs.architecture }}.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 7
