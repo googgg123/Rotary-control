@@ -81,7 +81,7 @@ jobs:
           APP_PATH="build-macos/Release/Rotary control.app"
           "$QT_ROOT_DIR/bin/macdeployqt" "$APP_PATH" \
             -always-overwrite -verbose=2 -codesign=-
-          lipo -verify_arch "$BUILD_ARCH" "$APP_PATH/Contents/MacOS/Rotary control"
+          lipo "$APP_PATH/Contents/MacOS/Rotary control" -verify_arch "$BUILD_ARCH"
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent \
             "$APP_PATH" "dist/Rotary-control-macOS-${BUILD_ARCH}.zip"
